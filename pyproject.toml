@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tepilora-mcp"
+version = "0.5.3rc4"
+description = "MCP server for Tepilora financial API"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{name = "Tepilora", email = "info@tepiloradata.com"}]
+keywords = ["tepilora", "mcp", "finance", "api", "llm", "claude"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "Tepilora>=0.4.1",
+    "fastmcp>=2.14,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-asyncio>=0.21",
+]
+
+[project.scripts]
+tepilora-mcp = "tepilora_mcp:main"
+
+[project.urls]
+Homepage = "https://github.com/Admintepilora/tepilora-mcp-python"
+Repository = "https://github.com/Admintepilora/tepilora-mcp-python"
+"Bug Tracker" = "https://github.com/Admintepilora/tepilora-mcp-python/issues"
+Documentation = "https://github.com/Admintepilora/tepilora-mcp-python#readme"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

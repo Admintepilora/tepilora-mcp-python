@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tepilora-mcp"
-version = "0.5.3rc4"
+version = "0.5.3rc5"
 description = "MCP server for Tepilora financial API"
 readme = "README.md"
 license = "MIT"

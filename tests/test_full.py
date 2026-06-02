@@ -43,6 +43,7 @@ class TestSkipActions:
             "securities.history",
             "portfolio.create",
             "portfolio.returns",
+            "queries.save",
             "news.search",
             "bonds.screen",
             "bonds.curve",

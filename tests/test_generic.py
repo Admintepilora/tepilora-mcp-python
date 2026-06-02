@@ -1,9 +1,11 @@
 """Tests for generic call_operation tool."""
 
 import importlib
+import inspect
 from unittest.mock import AsyncMock, patch
 
 from Tepilora._schema import SCHEMA
+from tepilora_mcp.tools import generic as generic_module
 from tepilora_mcp.tools.generic import (
     _call_operation,
     _call_operation_arrow_stream,
@@ -17,6 +19,21 @@ class TestCallOperation:
         description = getattr(call_operation, "description", None) or call_operation.__doc__ or ""
         assert f"{expected} operations" in description
 
+    def test_public_call_operation_is_async_export(self):
+        assert inspect.iscoroutinefunction(call_operation)
+        assert "call_operation" in generic_module.__all__
+
+    async def test_public_call_operation_delegates_to_private(self):
+        with patch.object(
+            generic_module,
+            "_call_operation",
+            AsyncMock(return_value={"ok": True}),
+        ) as mock_call:
+            result = await generic_module.call_operation("securities.search", {"limit": 1})
+
+        assert result == {"ok": True}
+        mock_call.assert_awaited_once_with("securities.search", {"limit": 1})
+
     async def test_get_client_singleton_uses_config_values(self):
         import tepilora_mcp.tools.generic as generic_module
 
@@ -29,7 +46,7 @@ class TestCallOperation:
             async def fake_resolve():
                 return "https://example.test"
 
-            with patch.object(generic_module, "TEPILORA_API_KEY", "api-key-test"), \
+            with patch.object(generic_module, "TEPILORA_MCP_API_KEY", "api-key-test"), \
                  patch.object(generic_module, "TEPILORA_MCP_TIMEOUT", 12.5), \
                  patch.object(generic_module, "_resolve_base_url", fake_resolve), \
                  patch.object(generic_module, "AsyncTepiloraClient", return_value=fake_client) as mock_ctor:

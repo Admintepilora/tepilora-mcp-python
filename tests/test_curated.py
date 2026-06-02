@@ -12,6 +12,7 @@ from tepilora_mcp.tools.curated import (
     _get_security_details,
     _get_price_history,
     _create_portfolio,
+    _save_query,
     _get_portfolio_returns,
     _run_analytics,
     _search_news,
@@ -95,6 +96,67 @@ class TestCreatePortfolio:
         await _create_portfolio("name", input_data={"ISIN1": 1.0})
         params = mock_transport.calls[-1]["payload"]["params"]
         assert params["input_data"] == {"ISIN1": 1.0}
+
+
+class TestSaveQuery:
+    async def test_static_query_payload(self, mock_transport):
+        await _save_query(
+            name="static_etfs",
+            type="static",
+            items=["IE00B4L5Y983EURXMIL", "IE00B52MJY50EURXMIL"],
+            description="seeded by mcp test",
+            tags=["etf", "test"],
+        )
+        payload = mock_transport.calls[-1]["payload"]
+        assert payload["action"] == "queries.save"
+        assert payload["params"] == {
+            "name": "static_etfs",
+            "category": "securities",
+            "type": "static",
+            "visibility": "private",
+            "items": ["IE00B4L5Y983EURXMIL", "IE00B52MJY50EURXMIL"],
+            "description": "seeded by mcp test",
+            "tags": ["etf", "test"],
+        }
+
+    async def test_minimal_defaults(self, mock_transport):
+        await _save_query("screen_01")
+        params = mock_transport.calls[-1]["payload"]["params"]
+        assert params == {
+            "name": "screen_01",
+            "category": "securities",
+            "type": "dynamic",
+            "visibility": "private",
+        }
+
+    async def test_omits_none_optional_fields(self, mock_transport):
+        await _save_query(
+            "none_skip",
+            definition=None,
+            items=None,
+            expression=None,
+            description=None,
+            tags=None,
+        )
+        params = mock_transport.calls[-1]["payload"]["params"]
+        assert "definition" not in params
+        assert "items" not in params
+        assert "expression" not in params
+        assert "description" not in params
+        assert "tags" not in params
+
+    async def test_dynamic_query_payload(self, mock_transport):
+        await _save_query(
+            name="dynamic_news",
+            category="news",
+            definition={"query": "rates", "filters": {"source": ["Reuters"]}},
+            visibility="workspace",
+        )
+        params = mock_transport.calls[-1]["payload"]["params"]
+        assert params["category"] == "news"
+        assert params["type"] == "dynamic"
+        assert params["visibility"] == "workspace"
+        assert params["definition"] == {"query": "rates", "filters": {"source": ["Reuters"]}}
 
 
 class TestGetPortfolioReturns:

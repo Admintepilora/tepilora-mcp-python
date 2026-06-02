@@ -62,6 +62,37 @@ async def _create_portfolio(
 
 
 @handle_tool_errors
+async def _save_query(
+    name: str,
+    category: str = "securities",
+    type: str = "dynamic",
+    visibility: str = "private",
+    definition: Optional[Dict[str, Any]] = None,
+    items: Optional[List[str]] = None,
+    expression: Optional[str] = None,
+    description: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    params: Dict[str, Any] = {
+        "name": name,
+        "category": category,
+        "type": type,
+        "visibility": visibility,
+    }
+    if definition is not None:
+        params["definition"] = definition
+    if items is not None:
+        params["items"] = items
+    if expression is not None:
+        params["expression"] = expression
+    if description is not None:
+        params["description"] = description
+    if tags is not None:
+        params["tags"] = tags
+    return await _call_operation("queries.save", params=params)
+
+
+@handle_tool_errors
 async def _get_portfolio_returns(
     id: str,
     start_date: Optional[str] = None,
@@ -271,6 +302,44 @@ async def create_portfolio(
         input_data: Alternative input data dict (format depends on input_type)
     """
     return await _create_portfolio(name, input_type, weights, start_date, input_data)
+
+
+@mcp.tool
+async def save_query(
+    name: str,
+    category: str = "securities",
+    type: str = "dynamic",
+    visibility: str = "private",
+    definition: Optional[Dict[str, Any]] = None,
+    items: Optional[List[str]] = None,
+    expression: Optional[str] = None,
+    description: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Save a reusable query definition.
+
+    Args:
+        name: Query name, up to 100 chars; letters, numbers, underscore, and hyphen.
+        category: Query category: "securities" (default), "news", or "publications".
+        type: Query type: "dynamic" (filters+text), "static" (TepiloraCode list), or "composite" (set algebra).
+        visibility: "private" (default, owner-only) or "workspace" (requires workspace context).
+        definition: For type="dynamic": {"query": str, "filters": dict}.
+        items: For type="static": list of TepiloraCode strings.
+        expression: For type="composite": set-algebra expression like "[A] + [B] - [C]".
+        description: Optional description, up to 500 chars.
+        tags: Optional list of tags.
+    """
+    return await _save_query(
+        name,
+        category,
+        type,
+        visibility,
+        definition,
+        items,
+        expression,
+        description,
+        tags,
+    )
 
 
 @mcp.tool

@@ -19,7 +19,7 @@ _AsyncDictFn = TypeVar("_AsyncDictFn", bound=Callable[..., Awaitable[Dict[str, A
 
 def _http_status_message(status_code: int) -> str:
     if status_code == 401:
-        return "Unauthorized: check `TEPILORA_API_KEY` and verify the key is active."
+        return "Unauthorized: check `TEPILORA_MCP_API_KEY` and verify the key is active."
     if status_code == 403:
         return "Forbidden: this API key is not allowed to use the requested operation."
     if status_code == 404:

@@ -1,6 +1,7 @@
 """Configuration for Tepilora MCP server."""
 
 import os
+import warnings
 
 
 def _env_int(name: str, default: int) -> int:
@@ -13,9 +14,30 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-TEPILORA_API_KEY = os.environ.get("TEPILORA_API_KEY", "")
+def _resolve_mcp_api_key() -> str:
+    canonical = os.environ.get("TEPILORA_MCP_API_KEY")
+    if canonical is not None:
+        return canonical
+
+    legacy = os.environ.get("TEPILORA_API_KEY")
+    if legacy is not None:
+        warnings.warn(
+            "TEPILORA_API_KEY is deprecated for tepilora-mcp; use "
+            "TEPILORA_MCP_API_KEY. The legacy alias will be removed in 0.6.0.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return legacy
+
+    return ""
+
+
+TEPILORA_MCP_API_KEY = _resolve_mcp_api_key()
+TEPILORA_API_KEY = TEPILORA_MCP_API_KEY
 TEPILORA_BASE_URL = os.environ.get("TEPILORA_BASE_URL", "https://tepiloradata.com")
 TEPILORA_FALLBACK_URL = os.environ.get("TEPILORA_FALLBACK_URL", "")
+
+
 def _env_float(name: str, default: float) -> float:
     raw = os.environ.get(name)
     if raw is None:

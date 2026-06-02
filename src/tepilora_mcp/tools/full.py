@@ -28,6 +28,7 @@ _SKIP_ACTIONS = {
     "securities.history",      # get_price_history
     "portfolio.create",        # create_portfolio
     "portfolio.returns",       # get_portfolio_returns
+    "queries.save",            # save_query
     "news.search",             # search_news
     "bonds.screen",            # screen_bonds
     "bonds.curve",             # get_yield_curve

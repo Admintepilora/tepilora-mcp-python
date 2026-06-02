@@ -9,7 +9,7 @@ from Tepilora import AsyncTepiloraClient
 from Tepilora._schema import SCHEMA
 
 from ..config import (
-    TEPILORA_API_KEY, TEPILORA_BASE_URL, TEPILORA_FALLBACK_URL, TEPILORA_MCP_TIMEOUT,
+    TEPILORA_MCP_API_KEY, TEPILORA_BASE_URL, TEPILORA_FALLBACK_URL, TEPILORA_MCP_TIMEOUT,
 )
 from .cache import CACHE, is_cacheable_action, make_cache_key
 from .credits import CREDITS
@@ -34,7 +34,7 @@ _CALL_OPERATION_DOC = f"""Call any Tepilora API operation by action string.
 async def _probe_url(url: str) -> bool:
     """Check if a base URL returns JSON (not HTML) on a lightweight call."""
     try:
-        probe = AsyncTepiloraClient(api_key=TEPILORA_API_KEY, base_url=url, timeout=5.0)
+        probe = AsyncTepiloraClient(api_key=TEPILORA_MCP_API_KEY, base_url=url, timeout=5.0)
         resp = await probe.call("search.global", params={"query": "test", "limit": 1})
         return hasattr(resp, "data")
     except Exception:
@@ -61,7 +61,7 @@ async def _get_or_create_client() -> AsyncTepiloraClient:
     if _client is None:
         url = await _resolve_base_url()
         _client = AsyncTepiloraClient(
-            api_key=TEPILORA_API_KEY,
+            api_key=TEPILORA_MCP_API_KEY,
             base_url=url,
             timeout=TEPILORA_MCP_TIMEOUT,
         )
@@ -135,11 +135,12 @@ async def call_operation(
     action: str,
     params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    """Public async operation caller for SDK/test integrations."""
     return await _call_operation(action, params)
 
 
 call_operation.__doc__ = _CALL_OPERATION_DOC
-call_operation = mcp.tool(call_operation)
+_call_operation_tool = mcp.tool(call_operation)
 
 
 @mcp.tool
@@ -195,3 +196,12 @@ async def _reset_credits() -> Dict[str, Any]:
         "reset": previous,
         "current": usage,
     }
+
+
+__all__ = [
+    "call_operation",
+    "call_operation_arrow_stream",
+    "clear_cache",
+    "get_credit_usage",
+    "reset_credits",
+]

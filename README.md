@@ -34,7 +34,7 @@ pip install tepilora-mcp
   "mcpServers": {
     "tepilora": {
       "command": "tepilora-mcp",
-      "env": { "TEPILORA_API_KEY": "your-api-key" }
+      "env": { "TEPILORA_MCP_API_KEY": "your-api-key" }
     }
   }
 }
@@ -43,13 +43,13 @@ pip install tepilora-mcp
 ### Claude Code
 
 ```bash
-claude mcp add tepilora tepilora-mcp -e TEPILORA_API_KEY=your-api-key
+claude mcp add tepilora tepilora-mcp -e TEPILORA_MCP_API_KEY=your-api-key
 ```
 
 ### Run Directly
 
 ```bash
-export TEPILORA_API_KEY=your-api-key
+export TEPILORA_MCP_API_KEY=your-api-key
 tepilora-mcp
 ```
 
@@ -73,6 +73,7 @@ tepilora-mcp
 | `get_security_details` | Get security information |
 | `get_price_history` | Historical price data |
 | `create_portfolio` | Create a portfolio |
+| `save_query` | Save a reusable query |
 | `get_portfolio_returns` | Portfolio return analysis |
 | `run_analytics` | 75+ analytics functions (summary-first with MCP resource for full data) |
 | `search_news` | Search financial news |
@@ -100,7 +101,7 @@ Set `TEPILORA_MCP_FULL_TOOLS=true` to expose all operations as individual tools.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `TEPILORA_API_KEY` | Yes | - | Your Tepilora API key |
+| `TEPILORA_MCP_API_KEY` | Yes | - | Your Tepilora API key for MCP (`TEPILORA_API_KEY` is a deprecated alias until 0.6.0) |
 | `TEPILORA_BASE_URL` | No | `https://tepiloradata.com` | API base URL |
 | `TEPILORA_FALLBACK_URL` | No | `-` | Fallback URL |
 | `TEPILORA_MCP_FULL_TOOLS` | No | `false` | Register all operations as tools |

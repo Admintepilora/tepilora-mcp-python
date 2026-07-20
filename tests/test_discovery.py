@@ -46,6 +46,35 @@ class TestListNamespaces:
         namespaces = _list_namespaces()
         assert namespaces == [{"namespace": "test", "operations": 1}]
 
+    def test_dashboard_ai_policy_counts_only_allowed_operations(self, monkeypatch):
+        import tepilora_mcp.tools.policy as policy
+
+        monkeypatch.setattr(policy, "TEPILORA_MCP_POLICY", "dashboard_ai")
+        monkeypatch.setattr(
+            discovery_module,
+            "SCHEMA",
+            {
+                "operations": {
+                    "attachments.parse": {
+                        "category": "attachments",
+                        "internal": False,
+                        "summary": "Parse attachment",
+                        "params": [],
+                    },
+                    "documents.parse": {
+                        "category": "documents",
+                        "internal": False,
+                        "summary": "Parse document",
+                        "params": [],
+                    },
+                }
+            },
+        )
+
+        namespaces = _list_namespaces()
+
+        assert namespaces == [{"namespace": "attachments", "operations": 1}]
+
 
 class TestListOperations:
     def test_list_securities(self):
@@ -79,6 +108,36 @@ class TestListOperations:
 
         result = _list_operations("test")
         assert result == [{"action": "test.normal", "summary": "Test op"}]
+
+    def test_dashboard_ai_policy_hides_disallowed_operations(self, monkeypatch):
+        import tepilora_mcp.tools.policy as policy
+
+        monkeypatch.setattr(policy, "TEPILORA_MCP_POLICY", "dashboard_ai")
+        monkeypatch.setattr(
+            discovery_module,
+            "SCHEMA",
+            {
+                "operations": {
+                    "attachments.parse": {
+                        "category": "attachments",
+                        "internal": False,
+                        "summary": "Parse attachment",
+                        "params": [],
+                    },
+                    "documents.parse": {
+                        "category": "documents",
+                        "internal": False,
+                        "summary": "Parse document",
+                        "params": [],
+                    },
+                }
+            },
+        )
+
+        assert _list_operations("attachments") == [
+            {"action": "attachments.parse", "summary": "Parse attachment"}
+        ]
+        assert _list_operations("documents") == []
 
 
 class TestDescribeOperation:
@@ -114,3 +173,62 @@ class TestDescribeOperation:
             "default": None,
             "description": "",
         }]
+
+    def test_file_params_include_mcp_transport_instructions(self, monkeypatch):
+        def fake_get_operation_info(_action: str):
+            return {
+                "action": "attachments.upload",
+                "category": "attachments",
+                "params": [
+                    {
+                        "name": "file",
+                        "type": "file",
+                        "required": True,
+                        "description": "Upload payload",
+                        "max_bytes": 10485760,
+                    }
+                ],
+            }
+
+        monkeypatch.setattr(discovery_module, "get_operation_info", fake_get_operation_info)
+
+        result = _describe_operation("attachments.upload")
+        file_param = result["params"][0]
+        assert file_param["type"] == "file"
+        assert file_param["mcp_transport"]["accepted_inputs"] == ["file_path", "content_base64"]
+        assert file_param["mcp_transport"]["max_bytes"] == 10485760
+
+    def test_dashboard_ai_policy_blocks_disallowed_describe(self, monkeypatch):
+        import tepilora_mcp.tools.policy as policy
+
+        def fake_get_operation_info(_action: str):
+            return {
+                "action": "documents.parse",
+                "category": "documents",
+                "params": [{"name": "file_path", "type": "string"}],
+            }
+
+        monkeypatch.setattr(policy, "TEPILORA_MCP_POLICY", "dashboard_ai")
+        monkeypatch.setattr(discovery_module, "get_operation_info", fake_get_operation_info)
+
+        result = _describe_operation("documents.parse")
+
+        assert result["error"] == "MCP policy blocked this tool or operation."
+        assert "documents.parse" in result["details"]
+
+    def test_binary_response_includes_mcp_output_instructions(self, monkeypatch):
+        def fake_get_operation_info(_action: str):
+            return {
+                "action": "attachments.download",
+                "category": "attachments",
+                "params": [{"name": "file_id", "type": "string", "required": True}],
+                "response_transport": "binary",
+            }
+
+        monkeypatch.setattr(discovery_module, "get_operation_info", fake_get_operation_info)
+
+        result = _describe_operation("attachments.download")
+
+        assert result["response_transport"] == "binary"
+        assert result["mcp_output"]["default"] == "content_base64"
+        assert "output_file_path" in result["mcp_output"]["save_to_file"]

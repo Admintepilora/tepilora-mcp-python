@@ -1,11 +1,17 @@
 """Shared fixtures for TepiloraMCP tests."""
 
 import json
+import sys
 from typing import Any, Dict, List
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
+
+SRC_PATH = Path(__file__).resolve().parents[1] / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
 
 from Tepilora import AsyncTepiloraClient
 from tepilora_mcp.tools.cache import CACHE

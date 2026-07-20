@@ -1,5 +1,6 @@
 """Tests for generic call_operation tool."""
 
+import base64
 import importlib
 import inspect
 from unittest.mock import AsyncMock, patch
@@ -11,6 +12,74 @@ from tepilora_mcp.tools.generic import (
     _call_operation_arrow_stream,
     call_operation,
 )
+
+
+def _schema_with_file_operation():
+    return {
+        "operations": {
+            "attachments.upload": {
+                "action": "attachments.upload",
+                "category": "attachments",
+                "operation": "upload",
+                "params": [
+                    {
+                        "name": "file",
+                        "type": "file",
+                        "required": True,
+                        "max_bytes": 16,
+                    },
+                    {"name": "filename", "type": "string", "required": True},
+                    {"name": "source", "type": "string", "required": False},
+                ],
+            },
+            "attachments.list": {
+                "action": "attachments.list",
+                "category": "attachments",
+                "operation": "list",
+                "params": [
+                    {"name": "limit", "type": "int", "required": False},
+                ],
+            },
+            "attachments.download": {
+                "action": "attachments.download",
+                "category": "attachments",
+                "operation": "download",
+                "response_transport": "binary",
+                "params": [
+                    {"name": "file_id", "type": "string", "required": True},
+                ],
+            },
+        }
+    }
+
+
+class _Response:
+    def __init__(self, data):
+        self.data = data
+
+
+class _BinaryMeta:
+    request_id = "req-binary"
+    execution_time_ms = 5
+    total_count = None
+    row_count = None
+
+
+class _BinaryResponse:
+    action = "attachments.download"
+    format = "binary"
+    content_type = "application/pdf"
+    content = b"%PDF-1.4\n"
+    meta = _BinaryMeta()
+    headers = {
+        "content-type": "application/pdf",
+        "content-disposition": 'attachment; filename="statement.pdf"',
+        "x-tepilora-request-id": "req-binary",
+    }
+
+
+def _multipart_mock_was_called(mock_client) -> bool:
+    return bool(getattr(getattr(mock_client, "call_multipart", None), "called", False))
 
 
 class TestCallOperation:
@@ -114,3 +183,198 @@ class TestCallOperation:
         assert result["format"] == "arrow"
         assert result["size_bytes"] == 3
         assert result["content_base64"] == "YWJj"
+
+    async def test_file_operation_accepts_file_path(self, tmp_path, monkeypatch, mock_client):
+        monkeypatch.setattr(generic_module, "SCHEMA", _schema_with_file_operation())
+        payload_path = tmp_path / "notes.txt"
+        payload_path.write_bytes(b"hello path")
+        mock_client.call_multipart = AsyncMock(return_value=_Response({"ok": True}))
+
+        result = await _call_operation(
+            "attachments.upload",
+            params={"file_path": str(payload_path), "source": "pytest"},
+        )
+
+        assert result == {"ok": True}
+        mock_client.call_multipart.assert_awaited_once()
+        _, kwargs = mock_client.call_multipart.await_args
+        assert kwargs["file_fields"] == ("file",)
+        assert kwargs["params"]["file"] == b"hello path"
+        assert kwargs["params"]["filename"] == "notes.txt"
+        assert kwargs["params"]["source"] == "pytest"
+        assert "file_path" not in kwargs["params"]
+
+    async def test_file_operation_accepts_content_base64(self, monkeypatch, mock_client):
+        monkeypatch.setattr(generic_module, "SCHEMA", _schema_with_file_operation())
+        mock_client.call_multipart = AsyncMock(return_value=_Response({"ok": True}))
+        encoded = base64.b64encode(b"hello b64").decode("ascii")
+
+        result = await _call_operation(
+            "attachments.upload",
+            params={"content_base64": encoded, "filename": "payload.txt"},
+        )
+
+        assert result == {"ok": True}
+        _, kwargs = mock_client.call_multipart.await_args
+        assert kwargs["file_fields"] == ("file",)
+        assert kwargs["params"]["file"] == b"hello b64"
+        assert kwargs["params"]["filename"] == "payload.txt"
+        assert "content_base64" not in kwargs["params"]
+
+    async def test_file_operation_rejects_multiple_sources(self, tmp_path, monkeypatch, mock_client):
+        monkeypatch.setattr(generic_module, "SCHEMA", _schema_with_file_operation())
+        payload_path = tmp_path / "notes.txt"
+        payload_path.write_bytes(b"hello")
+
+        result = await _call_operation(
+            "attachments.upload",
+            params={
+                "file_path": str(payload_path),
+                "content_base64": base64.b64encode(b"hello").decode("ascii"),
+            },
+        )
+
+        assert result["error"] == "Invalid parameters: verify required fields and value formats."
+        assert "accepts exactly one source" in result["details"]
+        assert not _multipart_mock_was_called(mock_client)
+
+    async def test_file_operation_rejects_traversal_path(self, tmp_path, monkeypatch, mock_client):
+        monkeypatch.setattr(generic_module, "SCHEMA", _schema_with_file_operation())
+        result = await _call_operation(
+            "attachments.upload",
+            params={"file_path": str(tmp_path / ".." / "notes.txt")},
+        )
+
+        assert result["error"] == "Invalid parameters: verify required fields and value formats."
+        assert "must not contain '..'" in result["details"]
+        assert not _multipart_mock_was_called(mock_client)
+
+    async def test_file_operation_rejects_oversize_base64(self, monkeypatch, mock_client):
+        monkeypatch.setattr(generic_module, "SCHEMA", _schema_with_file_operation())
+        encoded = base64.b64encode(b"x" * 17).decode("ascii")
+
+        result = await _call_operation(
+            "attachments.upload",
+            params={"content_base64": encoded, "filename": "large.txt"},
+        )
+
+        assert result["error"] == "Invalid parameters: verify required fields and value formats."
+        assert "exceeds max size" in result["details"]
+        assert not _multipart_mock_was_called(mock_client)
+
+    async def test_file_companion_operation_remains_json(self, monkeypatch, mock_transport):
+        monkeypatch.setattr(generic_module, "SCHEMA", _schema_with_file_operation())
+
+        result = await _call_operation("attachments.list", params={"limit": 5})
+
+        assert result is not None
+        assert len(mock_transport.calls) == 1
+        assert mock_transport.calls[0]["payload"]["action"] == "attachments.list"
+        assert mock_transport.calls[0]["payload"]["params"] == {"limit": 5}
+
+    async def test_binary_operation_returns_base64_by_default(self, monkeypatch, mock_client):
+        monkeypatch.setattr(generic_module, "SCHEMA", _schema_with_file_operation())
+        mock_client.call_binary = AsyncMock(return_value=_BinaryResponse())
+
+        result = await _call_operation("attachments.download", params={"file_id": "att_1"})
+
+        assert result["action"] == "attachments.download"
+        assert result["content_type"] == "application/pdf"
+        assert result["filename"] == "statement.pdf"
+        assert result["size_bytes"] == len(b"%PDF-1.4\n")
+        assert result["content_base64"] == base64.b64encode(b"%PDF-1.4\n").decode("ascii")
+        mock_client.call_binary.assert_awaited_once_with("attachments.download", params={"file_id": "att_1"})
+
+    async def test_binary_operation_writes_output_file(self, tmp_path, monkeypatch, mock_client):
+        monkeypatch.setattr(generic_module, "SCHEMA", _schema_with_file_operation())
+        mock_client.call_binary = AsyncMock(return_value=_BinaryResponse())
+        output_path = tmp_path / "statement.pdf"
+
+        result = await _call_operation(
+            "attachments.download",
+            params={"file_id": "att_1", "output_file_path": str(output_path)},
+        )
+
+        assert output_path.read_bytes() == b"%PDF-1.4\n"
+        assert result["output_file_path"] == str(output_path)
+        assert "content_base64" not in result
+        _, kwargs = mock_client.call_binary.await_args
+        assert kwargs["params"] == {"file_id": "att_1"}
+
+    async def test_binary_operation_rejects_traversal_output_path(self, tmp_path, monkeypatch, mock_client):
+        monkeypatch.setattr(generic_module, "SCHEMA", _schema_with_file_operation())
+        mock_client.call_binary = AsyncMock(return_value=_BinaryResponse())
+
+        result = await _call_operation(
+            "attachments.download",
+            params={"file_id": "att_1", "output_file_path": str(tmp_path / ".." / "statement.pdf")},
+        )
+
+        assert result["error"] == "Invalid parameters: verify required fields and value formats."
+        assert "must not contain '..'" in result["details"]
+        mock_client.call_binary.assert_not_awaited()
+
+    async def test_dashboard_ai_policy_blocks_documents_parse_before_sdk(self, monkeypatch, mock_transport):
+        import tepilora_mcp.tools.policy as policy
+
+        monkeypatch.setattr(policy, "TEPILORA_MCP_POLICY", "dashboard_ai")
+
+        result = await _call_operation("documents.parse", params={"file_path": "/tmp/secret.pdf"})
+
+        assert result["error"] == "MCP policy blocked this tool or operation."
+        assert "documents.parse" in result["details"]
+        assert mock_transport.calls == []
+
+    async def test_dashboard_ai_policy_blocks_attachment_upload_before_file_read(
+        self, tmp_path, monkeypatch, mock_client
+    ):
+        import tepilora_mcp.tools.policy as policy
+
+        monkeypatch.setattr(policy, "TEPILORA_MCP_POLICY", "dashboard_ai")
+        monkeypatch.setattr(generic_module, "SCHEMA", _schema_with_file_operation())
+        payload_path = tmp_path / "notes.txt"
+        payload_path.write_bytes(b"hello")
+
+        result = await _call_operation(
+            "attachments.upload",
+            params={"file_path": str(payload_path), "filename": "notes.txt"},
+        )
+
+        assert result["error"] == "MCP policy blocked this tool or operation."
+        assert "attachments.upload" in result["details"]
+        assert not _multipart_mock_was_called(mock_client)
+
+    async def test_dashboard_ai_policy_allows_attachment_parse(self, monkeypatch, mock_transport):
+        import tepilora_mcp.tools.policy as policy
+
+        monkeypatch.setattr(policy, "TEPILORA_MCP_POLICY", "dashboard_ai")
+
+        result = await _call_operation("attachments.parse", params={"file_id": "att_1"})
+
+        assert result["action"] == "attachments.parse"
+        assert mock_transport.calls[-1]["payload"]["action"] == "attachments.parse"
+
+    async def test_dashboard_ai_policy_blocks_arrow_for_disallowed_action(self, monkeypatch, mock_client):
+        import tepilora_mcp.tools.policy as policy
+
+        monkeypatch.setattr(policy, "TEPILORA_MCP_POLICY", "dashboard_ai")
+        mock_client.call_arrow_ipc_stream = AsyncMock()
+
+        result = await _call_operation_arrow_stream("documents.parse", {"file_path": "/tmp/secret.pdf"})
+
+        assert result["error"] == "MCP policy blocked this tool or operation."
+        assert "documents.parse" in result["details"]
+        mock_client.call_arrow_ipc_stream.assert_not_awaited()
+
+    async def test_dashboard_ai_policy_blocks_mutating_local_tools(self, monkeypatch):
+        import tepilora_mcp.tools.policy as policy
+
+        monkeypatch.setattr(policy, "TEPILORA_MCP_POLICY", "dashboard_ai")
+
+        clear_result = await generic_module._clear_cache()
+        reset_result = await generic_module._reset_credits()
+        usage_result = await generic_module._get_credit_usage()
+
+        assert clear_result["error"] == "MCP policy blocked this tool or operation."
+        assert reset_result["error"] == "MCP policy blocked this tool or operation."
+        assert "used_credits" in usage_result

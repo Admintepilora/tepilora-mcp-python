@@ -95,6 +95,46 @@ class TestMakeToolFunc:
             expected_line = f"  - {p['name']}: {p.get('type', 'any')}{required} {p.get('description', '')}"
             assert expected_line in doc
 
+    async def test_doc_describes_file_transport_params(self):
+        action = "attachments.upload"
+        op = {
+            "category": "attachments",
+            "summary": "Upload attachment",
+            "credits": 1,
+            "params": [
+                {
+                    "name": "file",
+                    "type": "file",
+                    "required": True,
+                    "description": "Upload payload.",
+                    "max_bytes": 10485760,
+                }
+            ],
+        }
+        func = _make_tool_func(action, op)
+        doc = func.__doc__ or ""
+        assert "`file_path`" in doc
+        assert "`content_base64`" in doc
+        assert "`file_path` or `file_base64`" in doc
+        assert "Max size: 10485760 bytes." in doc
+
+    async def test_doc_describes_binary_output(self):
+        action = "attachments.download"
+        op = {
+            "category": "attachments",
+            "summary": "Download attachment",
+            "credits": 1,
+            "response_transport": "binary",
+            "params": [
+                {"name": "file_id", "type": "string", "required": True},
+            ],
+        }
+        func = _make_tool_func(action, op)
+        doc = func.__doc__ or ""
+        assert "Binary output" in doc
+        assert "`content_base64`" in doc
+        assert "`output_file_path`" in doc
+
     async def test_doc_contains_no_parameters_for_paramless_ops(self):
         action = "bonds.metrics"
         op = SCHEMA["operations"][action]

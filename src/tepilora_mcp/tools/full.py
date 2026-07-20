@@ -11,6 +11,7 @@ from Tepilora._schema import SCHEMA
 
 from .errors import handle_tool_errors
 from .generic import _call_operation
+from .policy import is_operation_allowed
 from ..server import mcp
 
 # Method name renames (match SDK conventions)
@@ -54,9 +55,26 @@ def _make_tool_func(action: str, op: Dict[str, Any]):
     for p in param_info:
         req = " (required)" if p.get("required") else ""
         desc = p.get("description", "")
+        if p.get("type") == "file":
+            max_bytes = p.get("max_bytes")
+            transport = (
+                " MCP JSON input accepts exactly one of `file_path` or "
+                "`content_base64` for single-file operations; use "
+                f"`{p['name']}_path` or `{p['name']}_base64` when multiple "
+                "file fields exist."
+            )
+            if max_bytes:
+                transport += f" Max size: {max_bytes} bytes."
+            desc = f"{desc}{transport}"
         param_lines.append(f"  - {p['name']}: {p.get('type', 'any')}{req} {desc}")
 
     params_doc = "\n".join(param_lines) if param_lines else "  No parameters."
+    output_doc = ""
+    if op.get("response_transport") == "binary":
+        output_doc = (
+            "\nBinary output: returns `content_base64` by default. "
+            "Pass `output_file_path` in params to save bytes to a local file instead."
+        )
 
     # Deprecation notice
     deprecation_doc = ""
@@ -82,6 +100,7 @@ def _make_tool_func(action: str, op: Dict[str, Any]):
 Action: {action}
 Category: {op['category']}
 Credits: {op.get('credits', 1)}
+{output_doc}
 
 Parameters (pass as dict):
 {params_doc}
@@ -96,6 +115,8 @@ def register_all():
     """Register all operations as individual tools."""
     for action, op in sorted(SCHEMA["operations"].items()):
         if op.get("internal"):
+            continue
+        if not is_operation_allowed(action):
             continue
         if action in _SKIP_ACTIONS:
             continue

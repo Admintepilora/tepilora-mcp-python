@@ -53,25 +53,40 @@ def error_from_exception(exc: Exception) -> Dict[str, str]:
         return {
             "error": "Connection failed: could not reach Tepilora API. Check network and base URL.",
             "details": _format_details(exc),
+            "code": "connection_error",
         }
 
     if isinstance(exc, httpx.TimeoutException):
         return {
             "error": "Request timed out contacting Tepilora API. Retry or increase `TEPILORA_MCP_TIMEOUT`.",
             "details": _format_details(exc),
+            "code": "timeout",
+        }
+
+    if isinstance(exc, (httpx.NetworkError, httpx.RemoteProtocolError)):
+        return {
+            "error": "Unexpected error while calling Tepilora API.",
+            "details": _format_details(exc),
+            "code": "connection_error",
         }
 
     if TepiloraAPIError is not None and isinstance(exc, TepiloraAPIError):
         status = getattr(exc, "status_code", None)
-        if isinstance(status, int):
-            return {
-                "error": _http_status_message(status),
-                "details": _format_details(exc),
-            }
-        return {
-            "error": "Tepilora API returned an error response.",
+        result = {
+            "error": _http_status_message(status) if isinstance(status, int) else "Tepilora API returned an error response.",
             "details": _format_details(exc),
         }
+        payload = getattr(exc, "error_data", None)
+        if isinstance(payload, dict):
+            for envelope in ("detail", "error"):
+                if isinstance(payload.get(envelope), dict):
+                    payload = payload[envelope]
+                    break
+            for field in ("code", "message"):
+                value = payload.get(field)
+                if isinstance(value, str) and value:
+                    result[field] = value
+        return result
 
     if isinstance(exc, (KeyError, ValueError)):
         return {

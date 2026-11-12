@@ -149,14 +149,14 @@ class TestSaveQuery:
         await _save_query(
             name="dynamic_news",
             category="news",
-            definition={"query": "rates", "filters": {"source": ["Reuters"]}},
+            definition={"query": "rates", "filters": {"source": ["Example News"]}},
             visibility="workspace",
         )
         params = mock_transport.calls[-1]["payload"]["params"]
         assert params["category"] == "news"
         assert params["type"] == "dynamic"
         assert params["visibility"] == "workspace"
-        assert params["definition"] == {"query": "rates", "filters": {"source": ["Reuters"]}}
+        assert params["definition"] == {"query": "rates", "filters": {"source": ["Example News"]}}
 
 
 class TestGetPortfolioReturns:

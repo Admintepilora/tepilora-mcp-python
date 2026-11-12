@@ -6,6 +6,7 @@ import inspect
 from unittest.mock import AsyncMock, patch
 
 from Tepilora._schema import SCHEMA
+from Tepilora.errors import TepiloraAPIError
 from tepilora_mcp.tools import generic as generic_module
 from tepilora_mcp.tools.generic import (
     _call_operation,
@@ -163,6 +164,21 @@ class TestCallOperation:
         result = await _call_operation("some.action", params={"x": 1})
         assert result["error"] == "Unexpected error while calling Tepilora API."
         assert "RuntimeError: boom" in result["details"]
+
+    async def test_public_call_operation_preserves_real_attachment_error_fields(self, mock_client):
+        mock_client.call = AsyncMock(side_effect=TepiloraAPIError(
+            message="{'code': 'NOT_FOUND', 'message': 'Attachment not found'}",
+            status_code=404,
+            error_data={"detail": {"code": "NOT_FOUND", "message": "Attachment not found"}},
+        ))
+        result = await call_operation("attachments.parse", {
+            "file_id": "123e4567-e89b-12d3-a456-426614174000",
+            "max_chars": 50000, "max_pages": 20,
+        })
+        assert result["code"] == "NOT_FOUND"
+        assert result["message"] == "Attachment not found"
+        assert result["error"] == "Not found: the requested Tepilora operation or resource does not exist."
+        assert result["details"] == "TepiloraAPIError: HTTP 404: {'code': 'NOT_FOUND', 'message': 'Attachment not found'}"
 
     async def test_arrow_stream_operation_returns_base64_payload(self, mock_client):
         class _Meta:

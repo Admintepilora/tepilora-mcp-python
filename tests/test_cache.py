@@ -2,11 +2,21 @@
 
 import asyncio
 
-from tepilora_mcp.tools.cache import AsyncTTLCache, is_cacheable_action, make_cache_key
+import pytest
+
+from tepilora_mcp.tools.cache import CACHE, AsyncTTLCache, is_cacheable_action, make_cache_key
 from tepilora_mcp.tools.generic import _call_operation, _clear_cache
 
 
 class TestCacheHelpers:
+    @pytest.mark.parametrize("action", [
+        "realtime.quote", "realtime.quotes", "realtime.chart", "realtime.calendar",
+        "realtime.health", "realtime.asset_chart", "realtime.future_operation",
+    ])
+    def test_realtime_namespace_never_uses_cache(self, action):
+        assert is_cacheable_action(action) is False
+        assert is_cacheable_action("other.realtime.quote") is True
+
     def test_make_cache_key_is_order_independent(self):
         key1 = make_cache_key("securities.search", {"query": "MSCI", "limit": 10})
         key2 = make_cache_key("securities.search", {"limit": 10, "query": "MSCI"})
@@ -43,6 +53,16 @@ class TestAsyncTTLCache:
 
 
 class TestIntegration:
+    @pytest.mark.parametrize("action", ["realtime.quote", "realtime.quotes"])
+    async def test_realtime_bypasses_existing_cache_and_calls_sdk_each_time(self, mock_transport, action):
+        params = {"category": "fx"}
+        await CACHE.set(make_cache_key(action, params), {"old_cached_value": True})
+        first = await _call_operation(action, params)
+        second = await _call_operation(action, params)
+        assert "old_cached_value" not in first
+        assert first == second
+        assert len(mock_transport.calls) == 2
+
     async def test_cache_hit_avoids_second_sdk_call(self, mock_transport):
         params = {"query": "MSCI", "limit": 10}
         first = await _call_operation("securities.search", params)

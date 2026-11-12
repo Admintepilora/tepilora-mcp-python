@@ -474,7 +474,7 @@ async def get_realtime_calendar() -> Dict[str, Any]:
 
 @mcp.tool
 async def get_realtime_health() -> Dict[str, Any]:
-    """Get data source health status (gfinance, tradingview, yahoo, reuters)."""
+    """Get realtime data health status."""
     return await _get_realtime_health()
 
 

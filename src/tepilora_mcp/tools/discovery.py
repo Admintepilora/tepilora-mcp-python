@@ -8,14 +8,15 @@ from Tepilora import get_operation_info
 from Tepilora._schema import SCHEMA
 
 from ..server import mcp
+from .policy import blocked_payload, is_operation_allowed
 
 
 def _list_namespaces() -> List[Dict[str, Any]]:
     """List all Tepilora API namespaces with operation counts."""
     operations = SCHEMA["operations"]
     counts: Dict[str, int] = {}
-    for op in operations.values():
-        if op.get("internal"):
+    for action, op in operations.items():
+        if op.get("internal") or not is_operation_allowed(action):
             continue
         cat = op["category"]
         counts[cat] = counts.get(cat, 0) + 1
@@ -31,7 +32,7 @@ def _list_operations(namespace: str) -> List[Dict[str, str]]:
     operations = SCHEMA["operations"]
     result = []
     for action, op in sorted(operations.items()):
-        if op.get("internal") or op["category"] != namespace:
+        if op.get("internal") or op["category"] != namespace or not is_operation_allowed(action):
             continue
         entry = {
             "action": action,
@@ -50,23 +51,41 @@ def _describe_operation(action: str) -> Optional[Dict[str, Any]]:
     info = get_operation_info(action)
     if not info:
         return {"error": f"Operation '{action}' not found"}
+    if not is_operation_allowed(action):
+        return blocked_payload(action)
+
+    params = []
+    for p in info.get("params", []):
+        param = {
+            "name": p["name"],
+            "type": p.get("type", "any"),
+            "required": p.get("required", False),
+            "default": p.get("default"),
+            "description": p.get("description", ""),
+        }
+        if p.get("type") == "file":
+            param["mcp_transport"] = {
+                "accepted_inputs": ["file_path", "content_base64"],
+                "file_path": "Local readable file path. For multiple file fields use '<param>_path'.",
+                "content_base64": "Base64-encoded file bytes. For multiple file fields use '<param>_base64'.",
+                "max_bytes": p.get("max_bytes"),
+            }
+        params.append(param)
+
     result = {
         "action": info["action"],
         "category": info["category"],
         "summary": info.get("summary", ""),
         "description": info.get("description", ""),
         "credits": info.get("credits", 1),
-        "params": [
-            {
-                "name": p["name"],
-                "type": p.get("type", "any"),
-                "required": p.get("required", False),
-                "default": p.get("default"),
-                "description": p.get("description", ""),
-            }
-            for p in info.get("params", [])
-        ],
+        "params": params,
     }
+    if info.get("response_transport") == "binary":
+        result["response_transport"] = "binary"
+        result["mcp_output"] = {
+            "default": "content_base64",
+            "save_to_file": "Pass output_file_path to write bytes to a local file instead of returning content_base64.",
+        }
     if info.get("deprecated"):
         result["deprecated"] = True
         result["deprecated_since"] = info.get("deprecated_since", "")

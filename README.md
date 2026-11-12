@@ -97,6 +97,26 @@ tepilora-mcp
 
 Set `TEPILORA_MCP_FULL_TOOLS=true` to expose all operations as individual tools.
 
+### File Upload Inputs
+
+MCP tools are JSON-only. For operations whose schema parameter type is `file`,
+pass exactly one JSON transport input:
+
+- `file_path`: local readable file path, checked before upload.
+- `content_base64`: base64-encoded file bytes.
+
+For future operations with multiple file fields, use `<param>_path` or
+`<param>_base64`. The MCP server enforces the operation max size before sending
+bytes through the SDK multipart transport.
+
+### Binary Download Outputs
+
+Operations marked with `response_transport: binary` still return JSON through
+MCP. By default the tool response includes `content_base64`, `content_type`,
+`size_bytes`, headers, and metadata. To save bytes locally instead of returning
+them inline, pass `output_file_path`; the parent directory must already exist
+and existing files are not overwritten.
+
 ## Configuration
 
 | Variable | Required | Default | Description |
@@ -109,6 +129,7 @@ Set `TEPILORA_MCP_FULL_TOOLS=true` to expose all operations as individual tools.
 | `TEPILORA_MCP_CACHE_TTL` | No | `300` | Cache TTL in seconds (`0` disables) |
 | `TEPILORA_MCP_CACHE_MAX_SIZE` | No | `1000` | Max cached entries (LRU) |
 | `TEPILORA_MCP_CREDIT_LIMIT` | No | `0` | Session credit cap (`0` = unlimited) |
+| `TEPILORA_MCP_POLICY` | No | `public` | Runtime policy. Use `dashboard_ai` for dashboard AI contexts; it enforces a server-side read allowlist and blocks unsafe/write operations such as `documents.parse`, attachment upload/rename/delete, portfolio writes, cache clear, and credit reset. |
 
 ## Requirements
 

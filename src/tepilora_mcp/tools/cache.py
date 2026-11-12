@@ -39,6 +39,8 @@ def make_cache_key(action: str, params: Optional[Dict[str, Any]]) -> CacheKey:
 
 
 def is_cacheable_action(action: str) -> bool:
+    if action.lower().startswith("realtime."):
+        return False
     tail = action.split(".")[-1].lower()
     for prefix in _NON_CACHEABLE:
         if tail == prefix:
